@@ -144,6 +144,9 @@ def add_integration_callbacks(instance):
     from .hub import callbacks as hub_callbacks
     from .tensorboard import callbacks as tb_callbacks
 
-    for x in clearml_callbacks, comet_callbacks, hub_callbacks, tb_callbacks:
-        for k, v in x.items():
-            instance.callbacks[k].append(v)  # callback[name].append(func)
+    # for x in clearml_callbacks, comet_callbacks, hub_callbacks, tb_callbacks:
+    #     for k, v in x.items():
+    #         instance.callbacks[k].append(v)  # callback[name].append(func)
+
+    for k, v in tb_callbacks.items():
+        instance.callbacks[k].append(v)  # callback[name].append(func)
