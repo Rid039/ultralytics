@@ -7,7 +7,7 @@ from ultralytics.nn.tasks import (ClassificationModel, DetectionModel, Segmentat
                                   guess_model_task)
 from ultralytics.yolo.cfg import get_cfg
 from ultralytics.yolo.engine.exporter import Exporter
-from ultralytics.yolo.utils import DEFAULT_CFG, LOGGER, callbacks, yaml_load
+from ultralytics.yolo.utils import DEFAULT_CFG, LOGGER, RANK, callbacks, yaml_load
 from ultralytics.yolo.utils.checks import check_yaml
 from ultralytics.yolo.utils.torch_utils import smart_inference_mode
 
@@ -205,8 +205,9 @@ class YOLO:
             self.model = self.trainer.model
         self.trainer.train()
         # update model and cfg after training
-        self.model, _ = attempt_load_one_weight(str(self.trainer.best))
-        self.overrides = self.model.args
+        if RANK in {0, -1}:
+            self.model, _ = attempt_load_one_weight(str(self.trainer.best))
+            self.overrides = self.model.args
 
     def to(self, device):
         """
@@ -232,6 +233,13 @@ class YOLO:
          Returns class names of the loaded model.
         """
         return self.model.names
+
+    @property
+    def transforms(self):
+        """
+         Returns transform of the loaded model.
+        """
+        return self.model.transforms if hasattr(self.model, 'transforms') else None
 
     @staticmethod
     def add_callback(event: str, func):
