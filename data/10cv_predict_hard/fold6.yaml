@@ -1,0 +1,10 @@
+# train and val datasets (image directory or *.txt file with image paths)
+train: ../datasets/cb_1203_cleaned/10cv_ori_no_aug/fold6/train.txt      # 5772 images
+val: ../datasets/cb_1203_cleaned/10cv_ori_no_aug/fold6/train.txt          # 120 images
+test: ../datasets/cb_1203_cleaned/10cv_ori_no_aug/fold6/test.txt        # 121 images
+
+# number of classes
+nc: 1
+
+# class names
+names: ['centroblast']

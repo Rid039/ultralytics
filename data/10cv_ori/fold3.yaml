@@ -1,6 +1,6 @@
 # train and val datasets (image directory or *.txt file with image paths)
 train: ../datasets/cb_1203_cleaned/10cv_ori/fold3/train.txt      # 5772 images
-val: ../datasets/cb_1203_cleaned/10cv_ori/fold3/val.txt          # 120 images
+val: ../datasets/cb_1203_cleaned/10cv_ori/fold3/test.txt          # 120 images
 test: ../datasets/cb_1203_cleaned/10cv_ori/fold3/test.txt        # 121 images
 
 # number of classes

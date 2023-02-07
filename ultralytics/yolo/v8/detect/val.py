@@ -16,6 +16,8 @@ from ultralytics.yolo.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from ultralytics.yolo.utils.plotting import output_to_target, plot_images
 from ultralytics.yolo.utils.torch_utils import de_parallel
 
+from loguru import logger
+
 
 class DetectionValidator(BaseValidator):
 
@@ -110,7 +112,8 @@ class DetectionValidator(BaseValidator):
 
             # Save
             if self.args.save_json:
-                self.pred_to_json(predn, batch["im_file"][si])
+                # self.pred_to_json(predn, batch["im_file"][si])
+                self.pred_to_json(predn, batch["im_file"][si], correct_bboxes[:, 0], is_fp=True)
             # if self.args.save_txt:
             #    save_one_txt(predn, save_conf, shape, file=save_dir / 'labels' / f'{path.stem}.txt')
 
@@ -195,15 +198,16 @@ class DetectionValidator(BaseValidator):
                     fname=self.save_dir / f'val_batch{ni}_pred.jpg',
                     names=self.names)  # pred
 
-    def pred_to_json(self, predn, filename):
+    def pred_to_json(self, predn, filename, correct, is_fp: bool = False):
         stem = Path(filename).stem
         image_id = int(stem) if stem.isnumeric() else stem
         box = ops.xyxy2xywh(predn[:, :4])  # xywh
-        box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
-        for p, b in zip(predn.tolist(), box.tolist()):
+        # box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
+        for p, b, cor in zip(predn.tolist(), box.tolist(), correct.tolist()):
+            cat_id = 1 - cor if is_fp else self.class_map[int(p[5])]        # This is enough because test set and val set are single-class.
             self.jdict.append({
                 'image_id': image_id,
-                'category_id': self.class_map[int(p[5])],
+                'category_id': cat_id,
                 'bbox': [round(x, 3) for x in b],
                 'score': round(p[4], 5)})
 

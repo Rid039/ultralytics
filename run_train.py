@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+# https://docs.ultralytics.com/cfg/
 
 # Load a model
 # model = YOLO("yolov8n.yaml")  # build a new model from scratch
