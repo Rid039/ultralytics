@@ -16,6 +16,9 @@ from ultralytics.yolo.utils.files import increment_path
 from ultralytics.yolo.utils.ops import Profile
 from ultralytics.yolo.utils.torch_utils import de_parallel, select_device, smart_inference_mode
 
+from loguru import logger
+import os 
+import csv
 
 class BaseValidator:
     """
@@ -73,10 +76,12 @@ class BaseValidator:
         self.callbacks = defaultdict(list, callbacks.default_callbacks)  # add callbacks
 
     @smart_inference_mode()
-    def __call__(self, trainer=None, model=None):
+    def __call__(self, trainer=None, model=None, report_mode:int = 0, weight_path:str = ''):
         """
         Supports validation of a pre-trained model if passed or a model being trained
         if trainer is passed (trainer gets priority).
+
+        report_mode >> 0: no report, 1: only obj detection, 2: only positive classif, 3: 1 and 2, 4: only negative classif'
         """
         self.training = trainer is not None
         if self.training:
@@ -132,6 +137,12 @@ class BaseValidator:
         bar = tqdm(self.dataloader, desc, n_batches, bar_format=TQDM_BAR_FORMAT)
         self.init_metrics(de_parallel(model))
         self.jdict = []  # empty before each val
+
+        # TODO:CB 
+        dict_report = {'obj' : {'p': None, 'r':None, 'ap50':None, 'ap':None, 'fpc':None, 'tpc':None, 'gtc':None, 'conf_thres':self.args.conf},
+                        'classif' : {'tp': None, 'fp':None, 'positive':None, 'negative':None, 'conf_thres':self.args.conf}}
+        pred_posi_count = 0 
+
         for batch_i, batch in enumerate(bar):
             self.run_callbacks('on_val_batch_start')
             self.batch_i = batch_i
@@ -152,13 +163,34 @@ class BaseValidator:
             with dt[3]:
                 preds = self.postprocess(preds)
 
-            self.update_metrics(preds, batch)
+            # self.update_metrics(preds, batch)
+            count, seen = self.update_metrics(preds, batch, report_mode)
+            pred_posi_count += count
+
             if self.args.plots and batch_i < 3:
                 self.plot_val_samples(batch, batch_i)
                 self.plot_predictions(batch, preds, batch_i)
 
             self.run_callbacks('on_val_batch_end')
-        stats = self.get_stats()
+        
+        # TODO:CB
+        # store value to dict
+        if report_mode in [2, 3]:
+            dict_report['classif']['tp'] = pred_posi_count
+            dict_report['classif']['positive'] = seen
+        if report_mode == 4:
+            dict_report['classif']['fp'] = pred_posi_count
+            dict_report['classif']['negative'] = seen
+          
+        stats, dict_report = self.get_stats(self.args.conf, dict_report, report_mode)
+        
+        if report_mode in [1,3]:
+            dict_report['obj']['ap50'] = stats['metrics/mAP50(B)']
+            dict_report['obj']['ap'] = stats['metrics/mAP50-95(B)']
+
+        if report_mode != 0:
+            report2csv(dict_report, weight_path, report_mode)
+
         self.check_stats(stats)
         self.print_results()
         self.speed = tuple(x.t / len(self.dataloader.dataset) * 1E3 for x in dt)  # speeds per image
@@ -224,3 +256,36 @@ class BaseValidator:
 
     def eval_json(self, stats):
         pass
+
+# TODO:CB
+def report2csv(dict_report:dict(), weight_path:str, report_mode:int):
+    hnm = None
+    fold = None
+    for i in weight_path.split('/'):
+        if ('hnm' in i) or ('ori' in i):
+            hnm = i
+
+        if 'fold' in i:
+            fold = i[i.find('fold')+4:]
+    
+    key = {1:['obj'], 2:['classif'], 3:['obj', 'classif'], 4:['classif']}[report_mode]
+    for k in key:
+        dict_tmp = dict_report[k]
+
+        dict_tmp['hnm'] = hnm
+        dict_tmp['fold'] = fold 
+        
+        # dict_report = {'p': None, 'r':None, 'ap50':None, 'ap':None, 'fpc':None, 'tpc':None, 'gtc':None, 'conf_thres':conf_thres}
+        cols = [*dict_tmp.keys()]
+        rows = [dict_tmp]
+
+        filename = 'report_neg_classif.csv' if report_mode == 4 else f'report_{k}.csv'
+        mode = 'a' if filename in os.listdir() else 'w'
+
+        # writing to csv file 
+        with open(filename, mode) as csvfile: 
+            writer = csv.DictWriter(csvfile, fieldnames = cols) 
+            if mode == 'w':
+                writer.writeheader() 
+            writer.writerows(rows)
+            csvfile.close()

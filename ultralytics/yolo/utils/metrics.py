@@ -343,7 +343,7 @@ def compute_ap(recall, precision):
     return ap, mpre, mrec
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir=Path(), names=(), eps=1e-16, prefix=""):
+def ap_per_class(tp, conf, pred_cls, target_cls, conf_thres, dict_report, report_mode, plot=False, save_dir=Path(), names=(), eps=1e-16, prefix=""):
     """ Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
@@ -393,6 +393,15 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir=Path(), na
             if plot and j == 0:
                 py.append(np.interp(px, mrec, mpre))  # precision at mAP@0.5
 
+        # fill report
+        if report_mode in [1,3]:
+            dict_report['obj']['gtc'] = n_l
+            dict_report['obj']['fpc'] = np.interp(-conf_thres, -conf[i], fpc[:, 0])
+            dict_report['obj']['tpc'] = np.interp(-conf_thres, -conf[i], tpc[:, 0])
+
+            dict_report['obj']['p'] = np.interp(-conf_thres, -conf[i], precision[:, 0])
+            dict_report['obj']['r'] = np.interp(-conf_thres, -conf[i], recall[:, 0])
+
     # Compute F1 (harmonic mean of precision and recall)
     f1 = 2 * p * r / (p + r + eps)
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
@@ -407,7 +416,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir=Path(), na
     p, r, f1 = p[:, i], r[:, i], f1[:, i]
     tp = (r * nt).round()  # true positives
     fp = (tp / (p + eps) - tp).round()  # false positives
-    return tp, fp, p, r, f1, ap, unique_classes.astype(int)
+    return tp, fp, p, r, f1, ap, unique_classes.astype(int), dict_report
 
 
 class Metric:
@@ -502,10 +511,14 @@ class DetMetrics:
         self.names = names
         self.metric = Metric()
 
-    def process(self, tp, conf, pred_cls, target_cls):
-        results = ap_per_class(tp, conf, pred_cls, target_cls, plot=self.plot, save_dir=self.save_dir,
-                               names=self.names)[2:]
+    def process(self, tp, conf, pred_cls, target_cls, conf_thres, dict_report, report_mode):
+        tmp = ap_per_class(tp, conf, pred_cls, target_cls, conf_thres, dict_report, report_mode, plot=self.plot, save_dir=self.save_dir,
+                               names=self.names)
+        dict_report = tmp[-1]
+        results = tmp[2:-1]
         self.metric.update(results)
+
+        return dict_report
 
     @property
     def keys(self):

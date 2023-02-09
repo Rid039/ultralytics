@@ -130,7 +130,8 @@ class YOLODataset(BaseDataset):
             for lb in labels:
                 lb["segments"] = []
         nl = len(np.concatenate([label["cls"] for label in labels], 0))  # number of labels
-        assert nl > 0, f"{self.prefix}All labels empty in {cache_path}, can not start training. {HELP_URL}"
+        # TODO:CB (nl > 0 is False when predict negative patches, so below assert was commented)
+        # assert nl > 0, f"{self.prefix}All labels empty in {cache_path}, can not start training. {HELP_URL}"
         return labels
 
     # TODO: use hyp config to set all these augmentations

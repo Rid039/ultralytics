@@ -71,7 +71,8 @@ class DetectionValidator(BaseValidator):
                                         max_det=self.args.max_det)
         return preds
 
-    def update_metrics(self, preds, batch):
+    def update_metrics(self, preds, batch, report_mode=0):
+        pred_posi_count = 0
         # Metrics
         for si, pred in enumerate(preds):
             idx = batch["batch_idx"] == si
@@ -110,19 +111,24 @@ class DetectionValidator(BaseValidator):
                     self.confusion_matrix.process_batch(predn, labelsn)
             self.stats.append((correct_bboxes, pred[:, 4], pred[:, 5], cls.squeeze(-1)))  # (conf, pcls, tcls)
 
+            # TODO:CB 
+            if (report_mode in [2, 3, 4]) and (0 in predn[:, 5]):
+                pred_posi_count += 1
+
             # Save
             if self.args.save_json:
                 # self.pred_to_json(predn, batch["im_file"][si])
                 self.pred_to_json(predn, batch["im_file"][si], correct_bboxes[:, 0], is_fp=True)
             # if self.args.save_txt:
             #    save_one_txt(predn, save_conf, shape, file=save_dir / 'labels' / f'{path.stem}.txt')
+        return pred_posi_count, self.seen
 
-    def get_stats(self):
+    def get_stats(self, conf_thres=None, dict_report=None, report_mode=None):
         stats = [torch.cat(x, 0).cpu().numpy() for x in zip(*self.stats)]  # to numpy
         if len(stats) and stats[0].any():
-            self.metrics.process(*stats)
+            dict_report = self.metrics.process(*stats, conf_thres, dict_report, report_mode)
         self.nt_per_class = np.bincount(stats[-1].astype(int), minlength=self.nc)  # number of targets per class
-        return self.metrics.results_dict
+        return self.metrics.results_dict, dict_report
 
     def print_results(self):
         pf = '%22s' + '%11i' * 2 + '%11.3g' * len(self.metrics.keys)  # print format
