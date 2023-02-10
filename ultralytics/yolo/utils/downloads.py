@@ -6,7 +6,7 @@ from itertools import repeat
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from urllib import parse, request
-from zipfile import ZipFile
+from zipfile import ZipFile, is_zipfile, BadZipFile
 
 import requests
 import torch
@@ -26,6 +26,22 @@ def is_url(url, check=True):
                 return response.getcode() == 200  # check if exists online
         return True
     return False
+
+
+def unzip_file(file, path=None, exclude=('.DS_Store', '__MACOSX')):
+    """
+    Unzip a *.zip file to path/, excluding files containing strings in exclude list
+    Replaces: ZipFile(file).extractall(path=path)
+    """
+    if not (Path(file).exists() and is_zipfile(file)):
+        raise BadZipFile(f"File '{file}' does not exist or is a bad zip file.")
+    if path is None:
+        path = Path(file).parent  # default path
+    with ZipFile(file) as zipObj:
+        for f in zipObj.namelist():  # list all archived filenames in the zip
+            if all(x not in f for x in exclude):
+                zipObj.extract(f, path=path)
+        return zipObj.namelist()[0]  # return unzip dir
 
 
 def safe_download(url,
@@ -96,20 +112,23 @@ def safe_download(url,
                 LOGGER.warning(f'⚠️ Download failure, retrying {i + 1}/{retry} {url}...')
 
     if unzip and f.exists() and f.suffix in {'.zip', '.tar', '.gz'}:
-        LOGGER.info(f'Unzipping {f}...')
+        unzip_dir = dir or f.parent  # unzip to dir if provided else unzip in place
+        LOGGER.info(f'Unzipping {f} to {unzip_dir}...')
         if f.suffix == '.zip':
-            ZipFile(f).extractall(path=f.parent)  # unzip
+            unzip_dir = unzip_file(file=f, path=unzip_dir)  # unzip
         elif f.suffix == '.tar':
-            subprocess.run(['tar', 'xf', f, '--directory', f.parent], check=True)  # unzip
+            subprocess.run(['tar', 'xf', f, '--directory', unzip_dir], check=True)  # unzip
         elif f.suffix == '.gz':
-            subprocess.run(['tar', 'xfz', f, '--directory', f.parent], check=True)  # unzip
+            subprocess.run(['tar', 'xfz', f, '--directory', unzip_dir], check=True)  # unzip
         if delete:
             f.unlink()  # remove zip
+        return unzip_dir
 
 
 def attempt_download_asset(file, repo='ultralytics/assets', release='v0.0.0'):
     # Attempt file download from GitHub release assets if not found locally. release = 'latest', 'v6.2', etc.
     from ultralytics.yolo.utils import SETTINGS
+    from ultralytics.yolo.utils.checks import check_yolov5u_filename
 
     def github_assets(repository, version='latest'):
         # Return GitHub repo tag and assets (i.e. ['yolov8n.pt', 'yolov8s.pt', ...])
@@ -118,7 +137,10 @@ def attempt_download_asset(file, repo='ultralytics/assets', release='v0.0.0'):
         response = requests.get(f'https://api.github.com/repos/{repository}/releases/{version}').json()  # github api
         return response['tag_name'], [x['name'] for x in response['assets']]  # tag, assets
 
-    file = Path(str(file).strip().replace("'", ''))
+    # YOLOv3/5u updates
+    file = str(file)
+    file = check_yolov5u_filename(file)
+    file = Path(file.strip().replace("'", ''))
     if file.exists():
         return str(file)
     elif (SETTINGS['weights_dir'] / file).exists():
@@ -136,7 +158,9 @@ def attempt_download_asset(file, repo='ultralytics/assets', release='v0.0.0'):
             return file
 
         # GitHub assets
-        assets = [f'yolov8{size}{suffix}.pt' for size in 'nsmlx' for suffix in ('', '6', '-cls', '-seg')]  # default
+        assets = [f'yolov8{size}{suffix}.pt' for size in 'nsmlx' for suffix in ('', '6', '-cls', '-seg')] + \
+                 [f'yolov5{size}u.pt' for size in 'nsmlx'] + \
+                 [f'yolov3{size}u.pt' for size in ('', '-spp', '-tiny')]
         try:
             tag, assets = github_assets(repo, release)
         except Exception:

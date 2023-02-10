@@ -117,8 +117,9 @@ class BaseValidator:
 
             if self.device.type == 'cpu':
                 self.args.workers = 0  # faster CPU val as time dominated by inference, not dataloading
-            self.dataloader = self.dataloader or \
-                              self.get_dataloader(self.data.get("val") or self.data.set("test"), self.args.batch)
+            if not pt:
+                self.args.rect = False
+            self.dataloader = self.dataloader or self.get_dataloader(self.data.get(self.args.split), self.args.batch)
 
             model.eval()
             model.warmup(imgsz=(1 if pt else self.args.batch, 3, imgsz, imgsz))  # warmup
