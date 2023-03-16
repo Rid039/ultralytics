@@ -213,6 +213,19 @@ def non_max_suppression(
         # Detections matrix nx6 (xyxy, conf, cls)
         box, cls, mask = x.split((4, nc, nm), 1)
         box = xywh2xyxy(box)  # center_x, center_y, width, height) to (x1, y1, x2, y2)
+
+        # # Eliminate bbox which has abs(conf CB - conf nonCB) > 0.1 
+        # if nc == 2: 
+        #     d_thres = 0.1
+        #     tmp = []
+        #     for i, bc in enumerate(cls):
+        #         if torch.abs(bc[0] - bc[1]) <= d_thres:
+        #             # from loguru import logger
+        #             # logger.info(f'Out bbox = {bc}')
+        #             continue
+        #         tmp.append(i)
+        #     box, cls, mask = box[tmp, :], cls[tmp, :], mask[tmp, :]
+
         if multi_label:
             i, j = (cls > conf_thres).nonzero(as_tuple=False).T
             x = torch.cat((box[i], x[i, 4 + j, None], j[:, None].float(), mask[i]), 1)
